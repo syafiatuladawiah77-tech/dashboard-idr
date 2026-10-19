@@ -124,12 +124,17 @@ st.caption("Harga Emas · USD Index · IHSG · Machine Learning (XGBoost) — Sy
 
 master = load_data()
 
+avail = sorted(master["date"].dt.date.unique().tolist())
+
 with st.sidebar:
     st.header("Filter & Info")
-    dmin, dmax = master["date"].min().date(), master["date"].max().date()
-    start, end = st.date_input("Rentang tanggal", value=(dmin, dmax), min_value=dmin, max_value=dmax)
+    st.caption("Hanya tanggal yang tersedia di data yang bisa dipilih (akhir pekan/libur tidak ada).")
+    start = st.select_slider("Tanggal awal", options=avail, value=avail[0])
+    end = st.select_slider("Tanggal akhir", options=avail, value=avail[-1])
+    if start > end:
+        start, end = end, start
     st.metric("Total hari gabungan", f"{len(master):,}")
-    st.caption(f"Periode data: {dmin} s/d {dmax}")
+    st.caption(f"Periode data: {avail[0]} s/d {avail[-1]}")
 
 s, e = pd.Timestamp(start), pd.Timestamp(end) + pd.Timedelta(days=1)
 dfv = master[(master["date"] >= s) & (master["date"] < e)].copy()
@@ -170,8 +175,9 @@ with tab_ov:
 
 # ---- EDA
 with tab_eda:
-    if dfv.empty:
-        st.warning("Tidak ada data pada rentang ini.")
+    if len(dfv) < 3:
+        st.info("Rentang tanggal terlalu pendek (kurang dari 3 hari dengan data). "
+                "Korelasi & scatter butuh lebih banyak titik — silakan perluas rentang tanggal di panel kiri.")
     else:
         corr = dfv[VARS].corr()
         st.subheader("Heatmap Korelasi")
