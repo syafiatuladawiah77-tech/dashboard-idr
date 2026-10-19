@@ -129,10 +129,26 @@ avail = sorted(master["date"].dt.date.unique().tolist())
 with st.sidebar:
     st.header("Filter & Info")
     st.caption("Hanya tanggal yang tersedia di data yang bisa dipilih (akhir pekan/libur tidak ada).")
-    start = st.select_slider("Tanggal awal", options=avail, value=avail[0])
-    end = st.select_slider("Tanggal akhir", options=avail, value=avail[-1])
-    if start > end:
-        start, end = end, start
+
+    if "dt_start" not in st.session_state:
+        st.session_state.dt_start = avail[0]
+    if "dt_end" not in st.session_state:
+        st.session_state.dt_end = avail[-1]
+
+    if st.button("↺ Reset ke seluruh periode", use_container_width=True):
+        st.session_state.dt_start = avail[0]
+        st.session_state.dt_end = avail[-1]
+        st.rerun()
+
+    start = st.select_slider("Tanggal awal", options=avail, key="dt_start")
+
+    # Kunci: tanggal akhir hanya boleh >= tanggal awal, sehingga rentang tidak bisa terbalik.
+    if st.session_state.dt_end < start:
+        st.session_state.dt_end = start
+    opts_end = [d for d in avail if d >= start]
+    end = st.select_slider("Tanggal akhir", options=opts_end, key="dt_end")
+
+    st.metric("Rentang terpilih", f"{(pd.Timestamp(end) - pd.Timestamp(start)).days} hari")
     st.metric("Total hari gabungan", f"{len(master):,}")
     st.caption(f"Periode data: {avail[0]} s/d {avail[-1]}")
 
