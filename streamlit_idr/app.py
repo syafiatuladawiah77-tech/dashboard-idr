@@ -43,10 +43,13 @@ def load_data() -> pd.DataFrame:
         df["date"] = pd.to_datetime(df["date"])
         df.drop_duplicates(inplace=True)
 
+    # Berjangkar pada USD/IDR + emas (diperbarui harian). USD Index & IHSG di-left join
+    # karena sumbernya rilis lebih lambat, sehingga tanggal FX terbaru tetap tampil.
+    # Bagian ML tetap memakai baris lengkap (dropna), jadi analisis tidak terganggu.
     master = (
         cur.merge(gold, on="date", how="inner")
-        .merge(usd, on="date", how="inner")
-        .merge(ihsg, on="date", how="inner")
+        .merge(usd, on="date", how="left")
+        .merge(ihsg, on="date", how="left")
         .sort_values("date")
         .reset_index(drop=True)
     )
@@ -160,6 +163,19 @@ with st.sidebar:
 s, e = pd.Timestamp(start), pd.Timestamp(end) + pd.Timedelta(days=1)
 dfv = master[(master["date"] >= s) & (master["date"] < e)].copy()
 
+# Cakupan data: USD/IDR & emas harian (terbaru), vs 4-variabel sekaligus (terbatas lag USD Index/IHSG).
+last_fx = master["date"].max()
+_full = master.dropna(subset=["usd_index", "close"])
+last_full = _full["date"].max() if not _full.empty else None
+COVERAGE_NOTE = (
+    f"Cakupan data: **USD/IDR & emas** tersedia hingga **{last_fx.date()}** (diperbarui harian), "
+    f"sedangkan **analisis 4-variabel** (korelasi & machine learning yang butuh USD Index dan IHSG "
+    f"sekaligus) terbatas hingga **{last_full.date() if last_full is not None else '-'}**. "
+    "Ini bukan kekurangan model, melainkan karena **USD Index (sumber FRED/DTWEXBGS) rilis tertunda "
+    "~1-2 minggu** dan IHSG meliburkan akhir pekan. Saat sidang, tekankan bahwa dataset diperbarui "
+    "otomatis lewat pipeline Airflow, dan tanggal akhir bergerak maju begitu sumber menerbitkan angka terbaru."
+)
+
 tab_ov, tab_eda, tab_ml, tab_ai = st.tabs(["🏦 Ringkasan", "🔍 EDA & Korelasi", "🤖 Prediksi ML", "💬 Tanya Jawab AI"])
 
 # ---- Ringkasan
@@ -196,6 +212,7 @@ with tab_ov:
 
 # ---- EDA
 with tab_eda:
+    st.info(COVERAGE_NOTE, icon="📌")
     if len(dfv) < 3:
         st.info("Rentang tanggal terlalu pendek (kurang dari 3 hari dengan data). "
                 "Korelasi & scatter butuh lebih banyak titik — silakan perluas rentang tanggal di panel kiri.")
@@ -228,6 +245,7 @@ with tab_eda:
 with tab_ml:
     res, imp, test_out, fitted, best_model_name, features, defaults, last_date = train_models(master)
 
+    st.info(COVERAGE_NOTE, icon="📌")
     st.subheader("🎯 Prediksi Manual USD/IDR Hari Berikutnya")
     model_choice = st.selectbox(
         "Pilih model peramal",
