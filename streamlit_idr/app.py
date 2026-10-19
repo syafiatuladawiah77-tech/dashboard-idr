@@ -85,6 +85,7 @@ def train_models(master: pd.DataFrame):
     preds = {"Naive Baseline": yte.values * 0 + test["idr_current"].values}
     metrics = {"Naive Baseline": score(yte, test["idr_current"])}
 
+    fitted = {}
     for name, model in [
         ("Linear Regression", LinearRegression()),
         ("Random Forest", RandomForestRegressor(n_estimators=300, max_depth=5,
@@ -96,14 +97,18 @@ def train_models(master: pd.DataFrame):
         p = model.predict(Xte)
         preds[name] = p
         metrics[name] = score(yte, p)
-        if name == "XGBoost":
-            xgb_model, xgb_features = model, features
+        fitted[name] = model
 
-    imp = pd.DataFrame({"Feature": xgb_features, "Importance": xgb_model.feature_importances_})
+    xgb_model = fitted["XGBoost"]
+    imp = pd.DataFrame({"Feature": features, "Importance": xgb_model.feature_importances_})
     imp["Label"] = imp["Feature"].map(LABELS).fillna(imp["Feature"])
 
     res = pd.DataFrame({"Model": metrics.keys(), **{k: [m[k] for m in metrics.values()] for k in ["MAE", "RMSE", "R2"]}})
     res = res.sort_values("RMSE").reset_index(drop=True)
+
+    # Model terbaik yang bisa dipakai meramal dari fitur (selain Naive Baseline).
+    best_row = res[res["Model"] != "Naive Baseline"].iloc[0]
+    best_model_name = best_row["Model"]
 
     test_out = test[["date", "idr_current"]].copy()
     for name, p in preds.items():
@@ -111,7 +116,7 @@ def train_models(master: pd.DataFrame):
     test_out["Aktual"] = yte.values
     defaults = df_ml.iloc[-1][features].to_dict()
     last_date = df_ml["date"].iloc[-1]
-    return res, imp, test_out, xgb_model, features, defaults, last_date
+    return res, imp, test_out, fitted, best_model_name, features, defaults, last_date
 
 
 def fmt_idr(v):
@@ -120,7 +125,7 @@ def fmt_idr(v):
 
 # ---------------------------------------------------------------- page
 st.title("📊 Dashboard Analisis Nilai Tukar Rupiah (USD/IDR)")
-st.caption("Harga Emas · USD Index · IHSG · Machine Learning (XGBoost) — Syafiatul Adawiah (E1E124017)")
+st.caption("Harga Emas · USD Index · IHSG · Machine Learning — Syafiatul Adawiah (E1E124017)")
 
 master = load_data()
 
@@ -221,11 +226,18 @@ with tab_eda:
 
 # ---- ML
 with tab_ml:
-    res, imp, test_out, xgb_model, features, defaults, last_date = train_models(master)
+    res, imp, test_out, fitted, best_model_name, features, defaults, last_date = train_models(master)
 
     st.subheader("🎯 Prediksi Manual USD/IDR Hari Berikutnya")
-    st.caption("Isi nilai fitur di bawah (sudah terisi otomatis dari data terbaru), lalu tekan "
-               "**Hitung Prediksi**. Model XGBoost akan meramal kurs USD/IDR pada hari observasi berikutnya.")
+    model_choice = st.selectbox(
+        "Pilih model peramal",
+        list(fitted.keys()),
+        index=list(fitted.keys()).index(best_model_name),
+        help="Default memakai model dengan RMSE terkecil (terbaik) pada data uji.",
+    )
+    st.caption(f"Isi nilai fitur di bawah (sudah terisi otomatis dari data terbaru), lalu tekan "
+               f"**Hitung Prediksi**. Model **{model_choice}** akan meramal kurs USD/IDR pada hari "
+               f"observasi berikutnya.")
 
     feature_ui = {
         "idr_current": ("USD/IDR hari ini (t)", 1.0),
@@ -249,14 +261,14 @@ with tab_ml:
 
     if submitted:
         row = pd.DataFrame([[inputs[f] for f in features]], columns=features)
-        pred = float(xgb_model.predict(row)[0])
+        pred = float(fitted[model_choice].predict(row)[0])
         today = inputs["idr_current"]
         delta = pred - today
-        st.success(f"Prediksi USD/IDR hari berikutnya: **{fmt_idr(pred)}**")
+        st.success(f"Prediksi USD/IDR hari berikutnya ({model_choice}): **{fmt_idr(pred)}**")
         arah = "melemah (rupiah turun)" if delta > 0 else "menguat (rupiah naik)"
         st.write(f"Perubahan dari nilai hari ini: **{delta:+,.2f}** poin → {arah}.")
         with st.expander("Catatan akurasi"):
-            xgb_row = res[res["Model"] == "XGBoost"].iloc[0]
+            xgb_row = res[res["Model"] == model_choice].iloc[0]
             st.write(f"Model ini punya MAE ≈ Rp{xgb_row['MAE']:,.2f} dan RMSE ≈ "
                      f"Rp{xgb_row['RMSE']:,.2f} pada data uji. Jadi prediksi bisa meleset "
                      f"sekitar puluhan hingga ratusan poin, terutama saat pergerakan tajam.")
