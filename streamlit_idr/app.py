@@ -168,12 +168,13 @@ last_fx = master["date"].max()
 _full = master.dropna(subset=["usd_index", "close"])
 last_full = _full["date"].max() if not _full.empty else None
 COVERAGE_NOTE = (
-    f"Cakupan data: **USD/IDR & emas** tersedia hingga **{last_fx.date()}** (diperbarui harian), "
-    f"sedangkan **analisis 4-variabel** (korelasi & machine learning yang butuh USD Index dan IHSG "
-    f"sekaligus) terbatas hingga **{last_full.date() if last_full is not None else '-'}**. "
-    "Ini bukan kekurangan model, melainkan karena **USD Index (sumber FRED/DTWEXBGS) rilis tertunda "
-    "~1-2 minggu** dan IHSG meliburkan akhir pekan. Saat sidang, tekankan bahwa dataset diperbarui "
-    "otomatis lewat pipeline Airflow, dan tanggal akhir bergerak maju begitu sumber menerbitkan angka terbaru."
+    f"Data USD/IDR dan harga emas diperbarui setiap hari sehingga tersedia hingga "
+    f"{last_fx.date()}. Sementara itu, analisis yang menggunakan keempat variabel sekaligus "
+    f"(korelasi dan machine learning) hanya dapat dihitung sampai "
+    f"{last_full.date() if last_full is not None else '-'}. Hal ini karena data USD Index dari "
+    "sumbernya (FRED, seri DTWEXBGS) diterbitkan dengan keterlambatan sekitar 1-2 minggu, "
+    "sedangkan IHSG tidak memiliki data pada akhir pekan. Dengan demikian, tanggal akhir setiap "
+    "variabel tidak selalu sama."
 )
 
 tab_ov, tab_eda, tab_ml, tab_ai = st.tabs(["🏦 Ringkasan", "🔍 EDA & Korelasi", "🤖 Prediksi ML", "💬 Tanya Jawab AI"])
